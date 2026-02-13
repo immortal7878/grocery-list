@@ -261,7 +261,7 @@ body {
   background: var(--card); z-index: 1001;
   border-radius: 24px 24px 0 0;
   padding: 10px 24px calc(28px + var(--sab));
-  max-height: 70vh; overflow-y: auto;
+  max-height: 90vh; overflow-y: auto;
   box-shadow: 0 -12px 50px rgba(0,0,0,0.15);
   animation: sheetUp 0.32s cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -298,6 +298,36 @@ body {
   margin-top: 12px;
 }
 .sheet-submit:active { background: var(--green-dark); transform: scale(0.98); }
+
+/* Suggestion items */
+.suggest-label {
+  font-size: 12px; font-weight: 800; color: var(--faint);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  margin: 14px 0 8px;
+}
+.suggest-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;
+  max-height: 200px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.suggest-item {
+  padding: 10px 16px; border-radius: 14px;
+  border: 1.5px solid var(--border); font-size: 14px;
+  font-weight: 600; background: var(--card);
+  font-family: 'Nunito', sans-serif; cursor: pointer;
+  color: var(--text); transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.suggest-item:active { transform: scale(0.94); background: var(--green-light); }
+.suggest-item.added {
+  background: var(--green-light); border-color: var(--green);
+  color: var(--green-dark);
+}
+.suggest-or {
+  width: 100%; text-align: center; font-size: 12px;
+  font-weight: 700; color: var(--faint); margin: 10px 0;
+  text-transform: uppercase; letter-spacing: 1px;
+}
 
 .count-badge {
   font-size: 13px; color: var(--green); font-weight: 800;
@@ -672,9 +702,44 @@ function doAdd(text) {
 
 function mkAddSheet() {
   const md = state.sheetData;
+  if (!md.added) md.added = []; // track items added this session
   const s = h("div", { className: "sheet" });
   s.appendChild(h("div", { className: "handle" }));
-  s.appendChild(h("h2", null, "Add Item"));
+  s.appendChild(h("h2", null, "Add Items"));
+
+  // Category pills
+  const pills = h("div", { className: "sheet-pills" });
+  CATS.forEach(c => {
+    pills.appendChild(h("button", {
+      className: "sheet-pill" + (md.cat === c ? " on" : ""),
+      onClick: () => { md.cat = c; render(); }
+    }, c));
+  });
+  s.appendChild(pills);
+
+  // Suggestions for selected category
+  const suggestions = CAT_ITEMS[md.cat] || [];
+  if (suggestions.length) {
+    s.appendChild(h("div", { className: "suggest-label" }, "Tap to add"));
+    const grid = h("div", { className: "suggest-grid" });
+    suggestions.forEach(item => {
+      const wasAdded = md.added.includes(item.name);
+      grid.appendChild(h("button", {
+        className: "suggest-item" + (wasAdded ? " added" : ""),
+        onClick: () => {
+          if (wasAdded) return;
+          addItem(item.name, item.qty, md.cat);
+          md.added.push(item.name);
+          if (navigator.vibrate) navigator.vibrate(30);
+          render();
+        }
+      }, wasAdded ? "✓" : "+", `${item.name}`, item.qty ? h("span", { style: { fontSize: "11px", color: "var(--faint)", fontWeight: 500 } }, `(${item.qty})`) : ""));
+    });
+    s.appendChild(grid);
+  }
+
+  // Or type custom
+  s.appendChild(h("div", { className: "suggest-or" }, "— or type your own —"));
 
   const nameInp = h("input", {
     className: "sheet-field", placeholder: "Item name",
@@ -690,29 +755,251 @@ function mkAddSheet() {
   qtyInp.value = md.qty;
   s.appendChild(qtyInp);
 
-  const pills = h("div", { className: "sheet-pills" });
-  CATS.forEach(c => {
-    pills.appendChild(h("button", {
-      className: "sheet-pill" + (md.cat === c ? " on" : ""),
-      onClick: () => { md.cat = c; render(); setTimeout(() => { const inp = document.querySelector(".sheet .sheet-field"); if (inp) inp.focus(); }, 50); }
-    }, c));
-  });
-  s.appendChild(pills);
-
   s.appendChild(h("button", {
     className: "sheet-submit",
     onClick: () => {
       if (!md.name.trim()) return;
-      addItem(md.name.trim(), md.qty.trim(), md.cat);
+      const itemName = md.name.trim();
+      addItem(itemName, md.qty.trim(), md.cat);
       state.addCat = md.cat;
-      state.sheet = null;
+      md.added.push(itemName);
+      md.name = ""; md.qty = "";
       render();
-      toast(`✅ ${md.name} added!`);
+      toast(`✅ ${itemName} added!`);
     }
-  }, "Add to List"));
+  }, "Add Custom Item"));
+
+  // Done button
+  if (md.added.length > 0) {
+    s.appendChild(h("div", { style: { textAlign: "center", marginTop: "10px", fontSize: "14px", color: "var(--green)", fontWeight: 700 } },
+      `${md.added.length} item${md.added.length !== 1 ? "s" : ""} added`));
+  }
 
   return s;
 }
+
+// ─── CATEGORY ITEM SUGGESTIONS ───
+const CAT_ITEMS = {
+  "🥬 Produce": [
+    { name: "Bananas", qty: "1 bunch" },
+    { name: "Apples", qty: "6" },
+    { name: "Avocados", qty: "3" },
+    { name: "Tomatoes", qty: "1 lb" },
+    { name: "Onions", qty: "3" },
+    { name: "Garlic", qty: "1 head" },
+    { name: "Potatoes", qty: "5 lb bag" },
+    { name: "Carrots", qty: "1 bag" },
+    { name: "Broccoli", qty: "2 heads" },
+    { name: "Spinach", qty: "1 bag" },
+    { name: "Lettuce", qty: "1 head" },
+    { name: "Cucumbers", qty: "2" },
+    { name: "Bell Peppers", qty: "3" },
+    { name: "Lemons", qty: "4" },
+    { name: "Limes", qty: "4" },
+    { name: "Strawberries", qty: "1 lb" },
+    { name: "Blueberries", qty: "1 pint" },
+    { name: "Grapes", qty: "1 bag" },
+    { name: "Oranges", qty: "6" },
+    { name: "Mushrooms", qty: "8 oz" },
+    { name: "Celery", qty: "1 bunch" },
+    { name: "Cilantro", qty: "1 bunch" },
+    { name: "Ginger", qty: "1 piece" },
+    { name: "Sweet Potatoes", qty: "3" },
+    { name: "Zucchini", qty: "2" },
+    { name: "Corn", qty: "4 ears" },
+    { name: "Green Beans", qty: "1 lb" },
+    { name: "Jalapeños", qty: "3" },
+  ],
+  "🥛 Dairy": [
+    { name: "Whole Milk", qty: "1 gallon" },
+    { name: "2% Milk", qty: "1 gallon" },
+    { name: "Half & Half", qty: "1 quart" },
+    { name: "Heavy Cream", qty: "1 pint" },
+    { name: "Butter", qty: "1 lb" },
+    { name: "Eggs", qty: "1 dozen" },
+    { name: "Greek Yogurt", qty: "32 oz" },
+    { name: "Sour Cream", qty: "16 oz" },
+    { name: "Cream Cheese", qty: "8 oz" },
+    { name: "Cheddar Cheese", qty: "1 block" },
+    { name: "Mozzarella", qty: "1 bag" },
+    { name: "Parmesan", qty: "1 wedge" },
+    { name: "Swiss Cheese", qty: "8 oz" },
+    { name: "Cottage Cheese", qty: "16 oz" },
+    { name: "Almond Milk", qty: "½ gallon" },
+    { name: "Oat Milk", qty: "½ gallon" },
+    { name: "Orange Juice", qty: "½ gallon" },
+    { name: "String Cheese", qty: "1 pack" },
+    { name: "Shredded Cheese", qty: "1 bag" },
+    { name: "Whipped Cream", qty: "1 can" },
+  ],
+  "🥩 Meat": [
+    { name: "Chicken Breast", qty: "2 lbs" },
+    { name: "Chicken Thighs", qty: "2 lbs" },
+    { name: "Ground Beef", qty: "1 lb" },
+    { name: "Ground Turkey", qty: "1 lb" },
+    { name: "Steak", qty: "2 pieces" },
+    { name: "Pork Chops", qty: "4 pieces" },
+    { name: "Bacon", qty: "1 pack" },
+    { name: "Sausage Links", qty: "1 pack" },
+    { name: "Salmon", qty: "1 lb" },
+    { name: "Shrimp", qty: "1 lb" },
+    { name: "Tilapia", qty: "1 lb" },
+    { name: "Deli Turkey", qty: "½ lb" },
+    { name: "Deli Ham", qty: "½ lb" },
+    { name: "Hot Dogs", qty: "1 pack" },
+    { name: "Italian Sausage", qty: "1 lb" },
+    { name: "Rotisserie Chicken", qty: "1" },
+    { name: "Lamb Chops", qty: "1 lb" },
+    { name: "Tuna Steaks", qty: "2 pieces" },
+  ],
+  "🍞 Bakery": [
+    { name: "Bread (white)", qty: "1 loaf" },
+    { name: "Bread (wheat)", qty: "1 loaf" },
+    { name: "Bagels", qty: "6 pack" },
+    { name: "English Muffins", qty: "6 pack" },
+    { name: "Tortillas (flour)", qty: "1 pack" },
+    { name: "Tortillas (corn)", qty: "1 pack" },
+    { name: "Pita Bread", qty: "1 pack" },
+    { name: "Hamburger Buns", qty: "8 pack" },
+    { name: "Hot Dog Buns", qty: "8 pack" },
+    { name: "Croissants", qty: "4 pack" },
+    { name: "Rolls/Dinner Rolls", qty: "1 dozen" },
+    { name: "Banana Bread", qty: "1 loaf" },
+    { name: "Muffins", qty: "4 pack" },
+    { name: "Donuts", qty: "6 pack" },
+    { name: "Cake", qty: "1" },
+    { name: "Pie", qty: "1" },
+  ],
+  "🥫 Pantry": [
+    { name: "Pasta", qty: "1 box" },
+    { name: "Rice (white)", qty: "2 lbs" },
+    { name: "Rice (brown)", qty: "2 lbs" },
+    { name: "Olive Oil", qty: "1 bottle" },
+    { name: "Vegetable Oil", qty: "1 bottle" },
+    { name: "Soy Sauce", qty: "1 bottle" },
+    { name: "Pasta Sauce", qty: "1 jar" },
+    { name: "Canned Tomatoes", qty: "2 cans" },
+    { name: "Tomato Paste", qty: "1 can" },
+    { name: "Chicken Broth", qty: "1 carton" },
+    { name: "Canned Beans", qty: "2 cans" },
+    { name: "Canned Tuna", qty: "3 cans" },
+    { name: "Peanut Butter", qty: "1 jar" },
+    { name: "Jelly / Jam", qty: "1 jar" },
+    { name: "Honey", qty: "1 bottle" },
+    { name: "Flour", qty: "5 lbs" },
+    { name: "Sugar", qty: "4 lbs" },
+    { name: "Salt", qty: "1 container" },
+    { name: "Black Pepper", qty: "1" },
+    { name: "Cereal", qty: "1 box" },
+    { name: "Oatmeal", qty: "1 container" },
+    { name: "Pancake Mix", qty: "1 box" },
+    { name: "Syrup", qty: "1 bottle" },
+    { name: "Mac & Cheese", qty: "2 boxes" },
+    { name: "Breadcrumbs", qty: "1 can" },
+    { name: "Vinegar", qty: "1 bottle" },
+    { name: "Ketchup", qty: "1 bottle" },
+    { name: "Mustard", qty: "1 bottle" },
+    { name: "Mayo", qty: "1 jar" },
+    { name: "Hot Sauce", qty: "1 bottle" },
+    { name: "BBQ Sauce", qty: "1 bottle" },
+    { name: "Ranch Dressing", qty: "1 bottle" },
+  ],
+  "🧊 Frozen": [
+    { name: "Frozen Pizza", qty: "2" },
+    { name: "Ice Cream", qty: "1 tub" },
+    { name: "Frozen Veggies", qty: "1 bag" },
+    { name: "Frozen Fruit", qty: "1 bag" },
+    { name: "Frozen Waffles", qty: "1 box" },
+    { name: "Frozen Chicken Nuggets", qty: "1 bag" },
+    { name: "Frozen Fish Sticks", qty: "1 box" },
+    { name: "Frozen Burritos", qty: "1 pack" },
+    { name: "Ice Pops", qty: "1 box" },
+    { name: "Frozen Fries", qty: "1 bag" },
+    { name: "Frozen Meatballs", qty: "1 bag" },
+    { name: "Frozen Berries", qty: "1 bag" },
+    { name: "Frozen Corn", qty: "1 bag" },
+    { name: "Frozen Shrimp", qty: "1 bag" },
+    { name: "TV Dinners", qty: "3" },
+  ],
+  "🍿 Snacks": [
+    { name: "Chips", qty: "1 bag" },
+    { name: "Tortilla Chips", qty: "1 bag" },
+    { name: "Salsa", qty: "1 jar" },
+    { name: "Hummus", qty: "1 tub" },
+    { name: "Pretzels", qty: "1 bag" },
+    { name: "Popcorn", qty: "1 box" },
+    { name: "Crackers", qty: "1 box" },
+    { name: "Goldfish", qty: "1 bag" },
+    { name: "Granola Bars", qty: "1 box" },
+    { name: "Trail Mix", qty: "1 bag" },
+    { name: "Almonds", qty: "1 bag" },
+    { name: "Cookies", qty: "1 pack" },
+    { name: "Chocolate", qty: "1 bar" },
+    { name: "Fruit Snacks", qty: "1 box" },
+    { name: "Dried Fruit", qty: "1 bag" },
+    { name: "Rice Cakes", qty: "1 bag" },
+    { name: "Beef Jerky", qty: "1 bag" },
+    { name: "Guacamole", qty: "1 tub" },
+  ],
+  "🥤 Drinks": [
+    { name: "Water (case)", qty: "1 case" },
+    { name: "Sparkling Water", qty: "12 pack" },
+    { name: "Soda", qty: "12 pack" },
+    { name: "Apple Juice", qty: "½ gallon" },
+    { name: "Cranberry Juice", qty: "½ gallon" },
+    { name: "Lemonade", qty: "½ gallon" },
+    { name: "Coffee", qty: "1 bag" },
+    { name: "Tea", qty: "1 box" },
+    { name: "Creamer", qty: "1 bottle" },
+    { name: "Sports Drinks", qty: "8 pack" },
+    { name: "Coconut Water", qty: "4 pack" },
+    { name: "Wine", qty: "1 bottle" },
+    { name: "Beer", qty: "6 pack" },
+    { name: "Kombucha", qty: "4 pack" },
+    { name: "Energy Drinks", qty: "4 pack" },
+  ],
+  "🧹 Household": [
+    { name: "Paper Towels", qty: "1 pack" },
+    { name: "Toilet Paper", qty: "12 pack" },
+    { name: "Dish Soap", qty: "1 bottle" },
+    { name: "Laundry Detergent", qty: "1 bottle" },
+    { name: "Trash Bags", qty: "1 box" },
+    { name: "Sponges", qty: "1 pack" },
+    { name: "All-Purpose Cleaner", qty: "1 bottle" },
+    { name: "Disinfecting Wipes", qty: "1 container" },
+    { name: "Aluminum Foil", qty: "1 roll" },
+    { name: "Plastic Wrap", qty: "1 roll" },
+    { name: "Ziploc Bags", qty: "1 box" },
+    { name: "Napkins", qty: "1 pack" },
+    { name: "Hand Soap", qty: "1 bottle" },
+    { name: "Dryer Sheets", qty: "1 box" },
+    { name: "Bleach", qty: "1 bottle" },
+    { name: "Glass Cleaner", qty: "1 bottle" },
+    { name: "Light Bulbs", qty: "2 pack" },
+    { name: "Batteries", qty: "1 pack" },
+  ],
+  "💊 Health": [
+    { name: "Band-Aids", qty: "1 box" },
+    { name: "Ibuprofen", qty: "1 bottle" },
+    { name: "Tylenol", qty: "1 bottle" },
+    { name: "Vitamins", qty: "1 bottle" },
+    { name: "Allergy Medicine", qty: "1 box" },
+    { name: "Cough Medicine", qty: "1 bottle" },
+    { name: "Toothpaste", qty: "1 tube" },
+    { name: "Toothbrushes", qty: "2 pack" },
+    { name: "Floss", qty: "1" },
+    { name: "Mouthwash", qty: "1 bottle" },
+    { name: "Shampoo", qty: "1 bottle" },
+    { name: "Conditioner", qty: "1 bottle" },
+    { name: "Body Wash", qty: "1 bottle" },
+    { name: "Deodorant", qty: "1" },
+    { name: "Sunscreen", qty: "1 bottle" },
+    { name: "Tissues", qty: "1 box" },
+    { name: "Cotton Balls", qty: "1 bag" },
+    { name: "Hand Sanitizer", qty: "1 bottle" },
+    { name: "Lotion", qty: "1 bottle" },
+  ],
+};
 
 // ─── INIT ───
 // Auto-rejoin if we have saved credentials
